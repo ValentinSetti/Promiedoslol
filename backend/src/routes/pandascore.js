@@ -8,31 +8,42 @@ router.get('/leagues', async (req, res) => {
     const data = await pandaScore.getLeagues();
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, details: error.response?.data });
   }
 });
 
-router.get('/tournaments/:leagueId', async (req, res) => {
+router.get('/tournaments', async (req, res) => {
   try {
-    const data = await pandaScore.getTournaments(req.params.leagueId);
+    const { league_id } = req.query;
+    if (!league_id) {
+      return res.status(400).json({ error: 'Se requiere league_id' });
+    }
+    const data = await pandaScore.getTournaments(league_id);
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, details: error.response?.data });
   }
 });
 
 router.get('/matches', async (req, res) => {
   try {
-    const { limit, status, league_id } = req.query;
+    const { status, league_id, limit, page, date } = req.query;
     const filters = {};
-    if (limit) filters.per_page = limit;
-    if (status) filters.status = status;
-    if (league_id) filters.league_id = league_id;
 
-    const data = await pandaScore.getMatches(filters);
+    if (status) filters['filter[status]'] = status;
+    if (league_id) filters['filter[league_id]'] = league_id;
+    if (limit) filters['page[size]'] = parseInt(limit);
+    if (page) filters['page[number]'] = parseInt(page);
+    
+    if (date) {
+      const data = await pandaScore.getMatchesByDate(date, parseInt(limit) || 50);
+      return res.json(data);
+    }
+
+    const data = await pandaScore.getAllMatches(filters);
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, details: error.response?.data });
   }
 });
 
@@ -42,7 +53,7 @@ router.get('/matches/past', async (req, res) => {
     const data = await pandaScore.getPastMatches(limit);
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, details: error.response?.data });
   }
 });
 
@@ -52,7 +63,20 @@ router.get('/matches/upcoming', async (req, res) => {
     const data = await pandaScore.getUpcomingMatches(limit);
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, details: error.response?.data });
+  }
+});
+
+router.get('/matches/by-date', async (req, res) => {
+  try {
+    const { date, limit } = req.query;
+    if (!date) {
+      return res.status(400).json({ error: 'Se requiere el parámetro date (YYYY-MM-DD)' });
+    }
+    const data = await pandaScore.getMatchesByDate(date, parseInt(limit) || 50);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message, details: error.response?.data });
   }
 });
 
@@ -61,18 +85,19 @@ router.get('/matches/:id', async (req, res) => {
     const data = await pandaScore.getMatchById(req.params.id);
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, details: error.response?.data });
   }
 });
 
 router.get('/teams', async (req, res) => {
   try {
     const { search } = req.query;
-    const filters = search ? { search } : {};
+    const filters = {};
+    if (search) filters.search = search;
     const data = await pandaScore.getTeams(filters);
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, details: error.response?.data });
   }
 });
 
@@ -81,13 +106,18 @@ router.get('/teams/:id', async (req, res) => {
     const data = await pandaScore.getTeamById(req.params.id);
     res.json(data);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, details: error.response?.data });
   }
 });
 
 router.post('/cache/clear', (req, res) => {
   pandaScore.clearCache();
   res.json({ message: 'Cache limpiado' });
+});
+
+router.get('/cache/stats', (req, res) => {
+  const stats = pandaScore.getCacheStats();
+  res.json(stats);
 });
 
 export default router;

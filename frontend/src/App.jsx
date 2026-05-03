@@ -18,7 +18,7 @@ function App() {
   const [leaguesData, setLeaguesData] = useState([]);
   const [selectedLeague, setSelectedLeague] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('finished');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -44,9 +44,11 @@ function App() {
       let endpoint = '/api/matches?limit=100';
 
       if (filter === 'upcoming') {
-        endpoint = '/api/matches/upcoming?limit=50';
-      } else if (filter === 'past') {
-        endpoint = '/api/matches/past?limit=50';
+        endpoint = '/api/matches?status=upcoming&limit=50';
+      } else if (filter === 'finished') {
+        endpoint = '/api/matches?status=finished&limit=50';
+      } else if (filter === 'live') {
+        endpoint = '/api/matches?status=running&limit=50';
       }
 
       const response = await fetch(`${API_URL}${endpoint}`);
@@ -57,10 +59,18 @@ function App() {
         data = data.filter(m => m.league_id === selectedLeague || m.league?.id === selectedLeague);
       }
 
-      data = data.filter(m => {
-        const matchDate = new Date(m.begin_at).toDateString();
-        return matchDate === selectedDate.toDateString();
-      });
+      if (filter === 'all') {
+        data = data.filter(m => {
+          const dateToUse = m.scheduled_at || m.begin_at;
+          if (!dateToUse) return true;
+          const matchDate = new Date(dateToUse);
+          const now = new Date();
+          const sevenDaysAgo = new Date(now);
+          sevenDaysAgo.setDate(now.getDate() - 7);
+          return matchDate >= sevenDaysAgo && matchDate <= new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        });
+        data = data.filter(m => m.opponents && m.opponents.length >= 2 && m.opponents[0]?.opponent && m.opponents[1]?.opponent);
+      }
 
       setMatches(data);
     } catch (err) {
@@ -80,10 +90,11 @@ function App() {
 
   function getScore(match) {
     if (!match.results || match.results.length < 2) return null;
-    const team1 = match.opponents[0]?.team;
-    const team2 = match.opponents[1]?.team;
-    const score1 = match.results.find(r => r.team_id === team1?.id)?.score ?? 0;
-    const score2 = match.results.find(r => r.team_id === team2?.id)?.score ?? 0;
+    const team1 = match.opponents[0]?.opponent;
+    const team2 = match.opponents[1]?.opponent;
+    if (!team1 || !team2) return null;
+    const score1 = match.results.find(r => r.team_id === team1.id)?.score ?? 0;
+    const score2 = match.results.find(r => r.team_id === team2.id)?.score ?? 0;
     return { score1, score2 };
   }
 
@@ -175,7 +186,7 @@ function App() {
               </li>
               <li>
                 <button 
-                  onClick={() => setFilter('past')}
+                  onClick={() => setFilter('finished')}
                   className="w-full text-left px-3 py-2 rounded text-sm hover:bg-[#388E3C] text-green-100 transition"
                 >
                   Resultados
@@ -278,9 +289,9 @@ function App() {
 
                     <div className="flex items-center gap-3 flex-[3]">
                       <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
-                        <span className="font-medium text-sm text-right truncate">{match.opponents[0]?.team?.name || 'TBD'}</span>
-                        {match.opponents[0]?.team?.image_url && (
-                          <img src={match.opponents[0].team.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
+                        <span className="font-medium text-sm text-right truncate">{match.opponents[0]?.opponent?.name || 'TBD'}</span>
+                        {match.opponents[0]?.opponent?.image_url && (
+                          <img src={match.opponents[0].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
                         )}
                       </div>
 
@@ -303,10 +314,10 @@ function App() {
                       </div>
 
                       <div className="flex items-center gap-2 flex-1 justify-start min-w-0">
-                        {match.opponents[1]?.team?.image_url && (
-                          <img src={match.opponents[1].team.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
+                        {match.opponents[1]?.opponent?.image_url && (
+                          <img src={match.opponents[1].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
                         )}
-                        <span className="font-medium text-sm text-left truncate">{match.opponents[1]?.team?.name || 'TBD'}</span>
+                        <span className="font-medium text-sm text-left truncate">{match.opponents[1]?.opponent?.name || 'TBD'}</span>
                       </div>
                     </div>
                   </div>

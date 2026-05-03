@@ -2,17 +2,25 @@ import axios from 'axios';
 import NodeCache from 'node-cache';
 
 const cache = new NodeCache({ stdTTL: 300 });
-
 const PANDASCORE_BASE_URL = 'https://api.pandascore.co';
-const API_KEY = process.env.PANDASCORE_API_KEY;
 
-const pandaScoreClient = axios.create({
-  baseURL: PANDASCORE_BASE_URL,
-  headers: {
-    'Authorization': `Bearer ${API_KEY}`,
-    'Accept': 'application/json'
+function getApiKey() {
+  const key = process.env.PANDASCORE_API_KEY;
+  if (!key) {
+    throw new Error('PANDASCORE_API_KEY no está configurada en el archivo .env');
   }
-});
+  return key;
+}
+
+function createClient() {
+  return axios.create({
+    baseURL: PANDASCORE_BASE_URL,
+    headers: {
+      'Authorization': `Bearer ${getApiKey()}`,
+      'Accept': 'application/json'
+    }
+  });
+}
 
 async function fetchWithCache(endpoint, params = {}, ttl = 300) {
   const cacheKey = `${endpoint}:${JSON.stringify(params)}`;
@@ -23,61 +31,86 @@ async function fetchWithCache(endpoint, params = {}, ttl = 300) {
     return cached;
   }
 
-  console.log(`🌐 API call: ${endpoint}`);
-  const response = await pandaScoreClient.get(endpoint, { params });
-  const data = response.data;
-
-  cache.set(cacheKey, data, ttl);
-  return data;
+  console.log(`🌐 API call: ${endpoint}`, params);
+  try {
+    const client = createClient();
+    const response = await client.get(endpoint, { params });
+    const data = response.data;
+    cache.set(cacheKey, data, ttl);
+    return data;
+  } catch (error) {
+    console.error(`❌ Error en API call ${endpoint}:`, error.response?.data || error.message);
+    throw error;
+  }
 }
 
 export async function getLeagues() {
-  return fetchWithCache('/leagues', { videogame: 'league-of-legends' }, 600);
+  return fetchWithCache('/lol/leagues', { per_page: 50 }, 3600);
 }
 
 export async function getTournaments(leagueId) {
-  return fetchWithCache('/tournaments', { league_id: leagueId }, 300);
+  return fetchWithCache(`/lol/tournaments`, { 'filter[league_id]': leagueId }, 3000);
 }
 
 export async function getMatches(filters = {}) {
-  return fetchWithCache('/matches', { videogame: 'league-of-legends', ...filters }, 120);
+  return fetchWithCache('/lol/matches', filters, 600);
+}
+
+export async function getAllMatches(filters = {}) {
+  return fetchWithCache('/lol/matches', {
+    'sort': '-begin_at',
+    'page[size]': 100,
+    ...filters
+  }, 6000);
 }
 
 export async function getTeams(filters = {}) {
-  return fetchWithCache('/teams', { videogame: 'league-of-legends', ...filters }, 600);
+  return fetchWithCache('/lol/teams', filters, 600);
 }
 
 export async function getTeamById(teamId) {
-  return fetchWithCache(`/teams/${teamId}`, {}, 600);
+  return fetchWithCache(`/lol/teams/${teamId}`, {}, 600);
 }
 
 export async function getMatchById(matchId) {
-  return fetchWithCache(`/matches/${matchId}`, {}, 60);
+  return fetchWithCache(`/lol/matches/${matchId}`, {}, 60);
 }
 
 export async function getPastMatches(limit = 20) {
-  const now = new Date().toISOString();
-  return fetchWithCache('/matches', {
-    videogame: 'league-of-legends',
-    'begin_at.lte': now,
-    'status': 'finished',
+  return fetchWithCache('/lol/matches', {
+    'filter[status]': 'finished',
     'sort': '-begin_at',
-    per_page: limit
+    'page[size]': limit
   }, 300);
 }
 
 export async function getUpcomingMatches(limit = 20) {
-  const now = new Date().toISOString();
-  return fetchWithCache('/matches', {
-    videogame: 'league-of-legends',
-    'begin_at.gte': now,
-    'status': 'upcoming',
+  return fetchWithCache('/lol/matches', {
+    'filter[status]': 'upcoming',
     'sort': 'begin_at',
-    per_page: limit
+    'page[size]': limit
   }, 120);
+}
+
+export async function getMatchesByDate(date, limit = 50) {
+  const startOfDay = new Date(date);
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date(date);
+  endOfDay.setUTCHours(23, 59, 59, 999);
+
+  return fetchWithCache('/lol/matches', {
+    'filter[begin_at]': `${startOfDay.toISOString()},${endOfDay.toISOString()}`,
+    'sort': 'begin_at',
+    'page[size]': limit
+  }, 300);
 }
 
 export function clearCache() {
   cache.flushAll();
   console.log('🗑️ Cache limpiado');
+}
+
+export function getCacheStats() {
+  return cache.getStats();
 }
