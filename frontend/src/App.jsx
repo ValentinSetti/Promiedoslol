@@ -303,94 +303,76 @@ function App() {
             </div>
           </div>
 
-          <div className="bg-[#234d23] rounded-lg p-4 border border-[#388E3C]">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <span className="w-2 h-2 bg-[#4CAF50] rounded-full"></span>
-                {selectedLeague 
-                  ? leagues.find(l => l.id === selectedLeague)?.name || 'Liga'
-                  : `Partidos del ${formatDateHeader(selectedDate.toISOString())}`}
-              </h2>
-              <div className="flex gap-1">
-                <button
-                  onClick={() => setViewMode('partidos')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition ${
-                    viewMode === 'partidos' 
-                      ? 'bg-[#4CAF50] text-white' 
-                      : 'bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100'
-                  }`}
-                >
-                  Partidos
-                </button>
-                <button
-                  onClick={() => setViewMode('posiciones')}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition ${
-                    viewMode === 'posiciones' 
-                      ? 'bg-[#4CAF50] text-white' 
-                      : 'bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100'
-                  }`}
-                >
-                  Posiciones
-                </button>
-              </div>
-            </div>
+          {selectedLeague ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2 bg-[#234d23] rounded-lg p-4 border border-[#388E3C]">
+                <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-[#4CAF50] rounded-full"></span>
+                  {leagues.find(l => l.id === selectedLeague)?.name || 'Liga'}
+                </h2>
 
-            {loading && (
-              <div className="flex justify-center py-8">
-                <div className="w-8 h-8 border-2 border-[#4CAF50] border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            )}
+                {loading && (
+                  <div className="flex justify-center py-8">
+                    <div className="w-8 h-8 border-2 border-[#4CAF50] border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                )}
 
-            {error && (
-              <div className="text-center py-8 text-red-300 bg-red-900/20 rounded-lg p-4">
-                {error}
-              </div>
-            )}
+                {error && (
+                  <div className="text-center py-8 text-red-300 bg-red-900/20 rounded-lg p-4">
+                    {error}
+                  </div>
+                )}
 
-            {!loading && !error && matches.length === 0 && (
-              <div className="text-center py-8 text-green-200 bg-[#1e3d1e]/50 rounded-lg">
-                No hay partidos programados para esta fecha
-              </div>
-            )}
-
-            {viewMode === 'posiciones' && !loading && !error && (
-              <div className="bg-[#1e3d1e] rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-[#2E7D32] text-white">
-                    <tr>
-                      <th className="px-3 py-2 text-left">#</th>
-                      <th className="px-3 py-2 text-left">Equipo</th>
-                      <th className="px-3 py-2 text-center">PJ</th>
-                      <th className="px-3 py-2 text-center">G</th>
-                      <th className="px-3 py-2 text-center">P</th>
-                      <th className="px-3 py-2 text-center">%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {calculateStandings(matches).map((team, idx) => (
-                      <tr key={team.id} className="border-b border-[#388E3C] hover:bg-[#234d23]">
-                        <td className="px-3 py-2 text-[#4CAF50] font-bold">{idx + 1}</td>
-                        <td className="px-3 py-2 flex items-center gap-2">
-                          {team.image_url && (
-                            <img src={team.image_url} alt="" className="w-6 h-6 rounded-full" />
-                          )}
-                          <span className="text-white">{team.name}</span>
-                        </td>
-                        <td className="px-3 py-2 text-center text-green-100">{team.games}</td>
-                        <td className="px-3 py-2 text-center text-[#4CAF50]">{team.wins}</td>
-                        <td className="px-3 py-2 text-center text-red-300">{team.losses}</td>
-                        <td className="px-3 py-2 text-center text-green-100">
-                          {team.games > 0 ? Math.round((team.wins / team.games) * 100) : 0}%
-                        </td>
+                {!loading && !error && (
+                  <div className="bg-[#1e3d1e] rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-[#2E7D32] text-white">
+                      <tr>
+                        <th className="px-3 py-2 text-left">#</th>
+                        <th className="px-3 py-2 text-left">Equipo</th>
+                        <th className="px-3 py-2 text-center">PJ</th>
+                        <th className="px-3 py-2 text-center">G</th>
+                        <th className="px-3 py-2 text-center">P</th>
+                        <th className="px-3 py-2 text-center">%</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {calculateStandings(matches).map((team, idx) => (
+                        <tr key={team.id} className="border-b border-[#388E3C] hover:bg-[#234d23]">
+                          <td className="px-3 py-2 text-[#4CAF50] font-bold">{idx + 1}</td>
+                          <td className="px-3 py-2 flex items-center gap-2">
+                            {team.image_url && (
+                              <img src={team.image_url} alt="" className="w-6 h-6 rounded-full" />
+                            )}
+                            <span className="text-white">{team.name}</span>
+                          </td>
+                          <td className="px-3 py-2 text-center text-green-100">{team.games}</td>
+                          <td className="px-3 py-2 text-center text-[#4CAF50]">{team.wins}</td>
+                          <td className="px-3 py-2 text-center text-red-300">{team.losses}</td>
+                          <td className="px-3 py-2 text-center text-green-100">
+                            {team.games > 0 ? Math.round((team.wins / team.games) * 100) : 0}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                )}
               </div>
-            )}
 
-            {viewMode === 'partidos' && (
-            <div className="space-y-4">
+              <div className="bg-[#234d23] rounded-lg p-4 border border-[#388E3C]">
+                <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-[#4CAF50] rounded-full"></span>
+                  Partidos
+                </h2>
+
+                {!loading && !error && matches.length === 0 && (
+                  <div className="text-center py-8 text-green-200 bg-[#1e3d1e]/50 rounded-lg">
+                    No hay partidos
+                  </div>
+              )}
+
+              <div className="space-y-3">
               {(() => {
                 const grouped = groupMatchesByLeague(matches);
                 const sortedLeagueNames = sortLeagues(Object.keys(grouped));
@@ -453,9 +435,102 @@ function App() {
                   </div>
                 ));
               })()}
+              </div>
             </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="bg-[#234d23] rounded-lg p-4 border border-[#388E3C]">
+              <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 bg-[#4CAF50] rounded-full"></span>
+                Partidos
+              </h2>
+
+              {loading && (
+                <div className="flex justify-center py-8">
+                  <div className="w-8 h-8 border-2 border-[#4CAF50] border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
+
+              {error && (
+                <div className="text-center py-8 text-red-300 bg-red-900/20 rounded-lg p-4">
+                  {error}
+                </div>
+              )}
+
+              {!loading && !error && matches.length === 0 && (
+                <div className="text-center py-8 text-green-200 bg-[#1e3d1e]/50 rounded-lg">
+                  No hay partidos
+                </div>
+              )}
+
+              {!loading && !error && matches.length > 0 && (
+                <div className="space-y-3">
+                  {(() => {
+                    const grouped = groupMatchesByLeague(matches);
+                    const sortedLeagueNames = sortLeagues(Object.keys(grouped));
+                    return sortedLeagueNames.map(leagueName => (
+                      <div key={leagueName}>
+                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#388E3C]">
+                          <span className="text-sm font-bold text-[#4CAF50] uppercase tracking-wider">{leagueName}</span>
+                          <span className="text-xs text-green-400 bg-[#1e3d1e] px-2 py-0.5 rounded">{grouped[leagueName].length}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {grouped[leagueName].map(match => {
+                            const score = getScore(match);
+                            const isLive = match.status === 'running';
+                            const isFinished = match.status === 'finished';
+
+                            return (
+                              <div 
+                                key={match.id} 
+                                className={`bg-[#1e3d1e] rounded-lg p-3 flex items-center justify-between border-l-4 ${
+                                  isLive ? 'border-green-400' : isFinished ? 'border-gray-500' : 'border-[#4CAF50]'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3 flex-[3]">
+                                  <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+                                    <span className="font-medium text-sm text-right truncate">{match.opponents[0]?.opponent?.name || 'TBD'}</span>
+                                    {match.opponents[0]?.opponent?.image_url && (
+                                      <img src={match.opponents[0].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
+                                    )}
+                                  </div>
+
+                                  <div className="text-center min-w-[70px]">
+                                    {isFinished && score ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`text-xl font-bold ${score.score1 > score.score2 ? 'text-[#4CAF50]' : 'text-white'}`}>
+                                          {score.score1}
+                                        </span>
+                                        <span className="text-green-400">-</span>
+                                        <span className={`text-xl font-bold ${score.score2 > score.score1 ? 'text-[#4CAF50]' : 'text-white'}`}>
+                                          {score.score2}
+                                        </span>
+                                      </div>
+                                    ) : isLive ? (
+                                      <span className="text-green-400 font-bold text-xs bg-green-900/50 px-2 py-0.5 rounded animate-pulse">EN VIVO</span>
+                                    ) : (
+                                      <span className="text-[#81C784] font-bold text-sm">{formatTime(match.scheduled_at || match.begin_at)}</span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-2 flex-1 justify-start min-w-0">
+                                    {match.opponents[1]?.opponent?.image_url && (
+                                      <img src={match.opponents[1].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
+                                    )}
+                                    <span className="font-medium text-sm text-left truncate">{match.opponents[1]?.opponent?.name || 'TBD'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
         </main>
       </div>
 

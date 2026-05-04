@@ -36,8 +36,12 @@ router.get('/matches', async (req, res) => {
     if (page) filters['page[number]'] = parseInt(page);
     
     if (date) {
-      const data = await pandaScore.getMatchesByDate(date, parseInt(limit) || 50);
+      const data = await pandaScore.getMatchesByDate(date, parseInt(limit) || 10);
       return res.json(data);
+    }
+
+    if (!filters['page[size]']) {
+      filters['page[size]'] = 10;
     }
 
     const data = await pandaScore.getAllMatches(filters);
