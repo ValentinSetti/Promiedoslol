@@ -24,8 +24,7 @@ function App() {
 
   useEffect(() => {
     fetchLeagues();
-    fetchMatches();
-  }, [selectedLeague, selectedDate, filter]);
+  }, []);
 
   async function fetchLeagues() {
     try {
@@ -37,40 +36,7 @@ function App() {
     }
   }
 
-  async function fetchMatches() {
-    setLoading(true);
-    setError(null);
-    try {
-      let endpoint = '/api/matches?limit=10';
-
-      if (filter === 'live') {
-        endpoint = '/api/matches?status=running&limit=50';
-      }
-
-      if (selectedLeague) {
-        endpoint += `&league_id=${selectedLeague}`;
-      }
-
-      if (selectedDate) {
-        const year = selectedDate.getFullYear();
-        const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-        const day = String(selectedDate.getDate()).padStart(2, '0');
-        endpoint += `&date=${year}-${month}-${day}`;
-      }
-
-      const response = await fetch(`${API_URL}${endpoint}`);
-      if (!response.ok) throw new Error('Error al cargar partidos');
-      let data = await response.json();
-
-      data = data.filter(m => m.opponents && m.opponents.length >= 2 && m.opponents[0]?.opponent && m.opponents[1]?.opponent);
-
-      setMatches(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
+  // Matches are loaded inside the MatchesPanel to avoid refreshing the whole page when changing date
 
   async function fetchMatchesForStandings(leagueId) {
     try {
@@ -150,6 +116,144 @@ function App() {
     const score1 = match.results.find(r => r.team_id === team1.id)?.score ?? 0;
     const score2 = match.results.find(r => r.team_id === team2.id)?.score ?? 0;
     return { score1, score2 };
+  }
+
+
+  // MatchesPanel: renders date controls and matches list; fetches matches independently
+  function MatchesPanel({ selectedLeague, selectedDate, setSelectedDate, filter }) {
+    const [localMatches, setLocalMatches] = useState([]);
+    const [localLoading, setLocalLoading] = useState(false);
+    const [localError, setLocalError] = useState(null);
+
+    useEffect(() => {
+      let cancelled = false;
+      async function load() {
+        setLocalLoading(true);
+        setLocalError(null);
+        try {
+          let endpoint = '/api/matches?limit=50';
+          if (filter === 'live') endpoint = '/api/matches?status=running&limit=50';
+          if (selectedLeague) endpoint += `&league_id=${selectedLeague}`;
+          if (selectedDate) {
+            const year = selectedDate.getFullYear();
+            const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+            const day = String(selectedDate.getDate()).padStart(2, '0');
+            endpoint += `&date=${year}-${month}-${day}`;
+          }
+          const resp = await fetch(`${API_URL}${endpoint}`);
+          if (!resp.ok) throw new Error('Error al cargar partidos');
+          let data = await resp.json();
+          data = data.filter(m => m.opponents && m.opponents.length >= 2 && m.opponents[0]?.opponent && m.opponents[1]?.opponent);
+          if (!cancelled) setLocalMatches(data);
+        } catch (err) {
+          if (!cancelled) setLocalError(err.message);
+        } finally {
+          if (!cancelled) setLocalLoading(false);
+        }
+      }
+      load();
+      return () => { cancelled = true; };
+    }, [selectedLeague, selectedDate, filter]);
+
+    function handlePrev() {
+      const nd = new Date(selectedDate);
+      nd.setDate(nd.getDate() - 1);
+      setSelectedDate(nd);
+    }
+    function handleNext() {
+      const nd = new Date(selectedDate);
+      nd.setDate(nd.getDate() + 1);
+      setSelectedDate(nd);
+    }
+    function handleToday() {
+      setSelectedDate(new Date());
+    }
+
+    const grouped = groupMatchesByLeague(localMatches);
+    const sortedLeagueNames = sortLeagues(Object.keys(grouped));
+
+    return (
+      <div>
+        <div className="flex items-center justify-center mb-3 gap-4">
+          <button onClick={handlePrev} className="w-12 h-12 rounded bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100 text-2xl">‹</button>
+          <div className="text-center">
+            {selectedDate.toDateString() === new Date().toDateString() ? (
+              <span className="text-xl font-bold text-[#4CAF50]">HOY</span>
+            ) : (
+              <span className="text-lg">{selectedDate.getDate().toString().padStart(2, '0')}/{(selectedDate.getMonth() + 1).toString().padStart(2, '0')}</span>
+            )}
+          </div>
+          <button onClick={handleNext} className="w-12 h-12 rounded bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100 text-2xl">›</button>
+        </div>
+
+        {localLoading && <div className="flex justify-center py-8"><div className="w-8 h-8 border-2 border-[#4CAF50] border-t-transparent rounded-full animate-spin"></div></div>}
+        {localError && <div className="text-center py-8 text-red-300 bg-red-900/20 rounded-lg p-4">{localError}</div>}
+
+        {!localLoading && !localError && localMatches.length === 0 && (
+          <div className="text-center py-8 text-green-200 bg-[#1e3d1e]/50 rounded-lg">No hay partidos</div>
+        )}
+
+        <div className="space-y-3">
+          {sortedLeagueNames.map(leagueName => (
+            <div key={leagueName}>
+              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#388E3C]">
+                <span className="text-sm font-bold text-[#4CAF50] uppercase tracking-wider">{leagueName}</span>
+                <span className="text-xs text-green-400 bg-[#1e3d1e] px-2 py-0.5 rounded">{grouped[leagueName].length}</span>
+              </div>
+              <div className="space-y-2">
+                {grouped[leagueName].map(match => {
+                  const score = getScore(match);
+                  const isLive = match.status === 'running';
+                  const isFinished = match.status === 'finished';
+
+                  return (
+                    <div 
+                      key={match.id} 
+                      className={`bg-[#1e3d1e] rounded-lg p-3 flex items-center justify-between border-l-4 ${
+                        isLive ? 'border-green-400' : isFinished ? 'border-gray-500' : 'border-[#4CAF50]'
+                      }`}>
+                      <div className="flex items-center gap-3 flex-[3]">
+                        <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+                          <span className="font-medium text-sm text-right truncate">{match.opponents[0]?.opponent?.name || 'TBD'}</span>
+                          {match.opponents[0]?.opponent?.image_url && (
+                            <img src={match.opponents[0].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
+                          )}
+                        </div>
+
+                        <div className="text-center min-w-[70px]">
+                          {isFinished && score ? (
+                            <div className="flex items-center justify-center gap-1.5">
+                              <span className={`text-xl font-bold ${score.score1 > score.score2 ? 'text-[#4CAF50]' : 'text-white'}`}>{score.score1}</span>
+                              <span className="text-green-400">-</span>
+                              <span className={`text-xl font-bold ${score.score2 > score.score1 ? 'text-[#4CAF50]' : 'text-white'}`}>{score.score2}</span>
+                            </div>
+                          ) : isLive ? (
+                            <span className="text-green-400 font-bold text-xs bg-green-900/50 px-2 py-0.5 rounded animate-pulse">EN VIVO</span>
+                          ) : (
+                            <span className="text-[#81C784] font-bold text-sm">{formatDateTime(match.scheduled_at || match.begin_at)}</span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-1 justify-start min-w-0">
+                          {match.opponents[1]?.opponent?.image_url && (
+                            <img src={match.opponents[1].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
+                          )}
+                          <span className="font-medium text-sm text-left truncate">{match.opponents[1]?.opponent?.name || 'TBD'}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div className="text-xs text-green-200">{match.league?.name}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   function calculateStandings(matches) {
@@ -255,6 +359,8 @@ function App() {
         </div>
       </header>
 
+      {/* MatchesPanel moved into the main 'Partidos' card when no league is selected */}
+
       <div className="flex">
         <aside className="w-56 bg-[#1e3d1e] min-h-screen border-r border-[#388E3C] hidden md:block">
           <div className="p-3">
@@ -292,14 +398,7 @@ function App() {
           <div className="p-3 border-t border-[#388E3C]">
             <h3 className="text-xs font-semibold text-green-300 uppercase tracking-wider mb-2">Accesos</h3>
             <ul className="space-y-0.5">
-              <li>
-                <button 
-                  onClick={() => setSelectedDate(new Date())}
-                  className="w-full text-left px-3 py-2 rounded text-sm hover:bg-[#388E3C] text-green-100 transition"
-                >
-                  Partidos de Hoy
-                </button>
-              </li>
+              {/* Removed direct 'Hoy' quick-access button per UX change */}
               <li>
                 <button 
                   onClick={() => {
@@ -325,61 +424,7 @@ function App() {
         </aside>
 
         <main className="flex-1 p-4">
-          <div className="bg-[#234d23] rounded-lg p-4 mb-4 border border-[#388E3C]">
-            <div className="flex flex-wrap gap-2 mb-4">
-              {[
-                { key: 'all', label: 'Todos' },
-                { key: 'live', label: 'En Vivo' },
-              ].map(f => (
-                <button
-                  key={f.key}
-                  onClick={() => setFilter(f.key)}
-                  className={`px-4 py-1.5 rounded text-sm font-medium transition ${
-                    filter === f.key 
-                      ? 'bg-[#4CAF50] text-white' 
-                      : 'bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center justify-center gap-4">
-              <button
-                onClick={() => {
-                  const newDate = new Date(selectedDate);
-                  newDate.setDate(newDate.getDate() - 1);
-                  setSelectedDate(newDate);
-                }}
-                className="flex-shrink-0 w-12 h-12 rounded-full bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100 flex items-center justify-center text-2xl font-bold transition"
-              >
-                ‹
-              </button>
-              
-              <div className="text-center">
-                {selectedDate.toDateString() === new Date().toDateString() ? (
-                  <span className="text-xl font-bold text-[#4CAF50]">HOY</span>
-                ) : (
-                  <span className="text-xl font-bold text-white">
-                    {selectedDate.getDate().toString().padStart(2, '0')}/
-                    {(selectedDate.getMonth() + 1).toString().padStart(2, '0')}
-                  </span>
-                )}
-              </div>
-
-              <button
-                onClick={() => {
-                  const newDate = new Date(selectedDate);
-                  newDate.setDate(newDate.getDate() + 1);
-                  setSelectedDate(newDate);
-                }}
-                className="flex-shrink-0 w-12 h-12 rounded-full bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100 flex items-center justify-center text-2xl font-bold transition"
-              >
-                ›
-              </button>
-            </div>
-          </div>
+          
 
           {selectedLeague ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -444,77 +489,8 @@ function App() {
                   Partidos
                 </h2>
 
-                {!loading && !error && matches.length === 0 && (
-                  <div className="text-center py-8 text-green-200 bg-[#1e3d1e]/50 rounded-lg">
-                    No hay partidos
-                  </div>
-              )}
-
-              <div className="space-y-3">
-              {(() => {
-                const grouped = groupMatchesByLeague(matches);
-                const sortedLeagueNames = sortLeagues(Object.keys(grouped));
-                return sortedLeagueNames.map(leagueName => (
-                  <div key={leagueName}>
-                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#388E3C]">
-                      <span className="text-sm font-bold text-[#4CAF50] uppercase tracking-wider">{leagueName}</span>
-                      <span className="text-xs text-green-400 bg-[#1e3d1e] px-2 py-0.5 rounded">{grouped[leagueName].length}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {grouped[leagueName].map(match => {
-                        const score = getScore(match);
-                        const isLive = match.status === 'running';
-                        const isFinished = match.status === 'finished';
-
-                        return (
-                          <div 
-                            key={match.id} 
-                            className={`bg-[#1e3d1e] rounded-lg p-3 flex items-center justify-between border-l-4 ${
-                              isLive ? 'border-green-400' : isFinished ? 'border-gray-500' : 'border-[#4CAF50]'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3 flex-[3]">
-                              <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
-                                <span className="font-medium text-sm text-right truncate">{match.opponents[0]?.opponent?.name || 'TBD'}</span>
-                                {match.opponents[0]?.opponent?.image_url && (
-                                  <img src={match.opponents[0].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
-                                )}
-                              </div>
-
-                              <div className="text-center min-w-[70px]">
-                                {isFinished && score ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`text-xl font-bold ${score.score1 > score.score2 ? 'text-[#4CAF50]' : 'text-white'}`}>
-                                      {score.score1}
-                                    </span>
-                                    <span className="text-green-400">-</span>
-                                    <span className={`text-xl font-bold ${score.score2 > score.score1 ? 'text-[#4CAF50]' : 'text-white'}`}>
-                                      {score.score2}
-                                    </span>
-                                  </div>
-                                ) : isLive ? (
-                                  <span className="text-green-400 font-bold text-xs bg-green-900/50 px-2 py-0.5 rounded animate-pulse">EN VIVO</span>
-                                ) : (
-                                  <span className="text-[#81C784] font-bold text-sm">{formatDateTime(match.scheduled_at || match.begin_at)}</span>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-2 flex-1 justify-start min-w-0">
-                                {match.opponents[1]?.opponent?.image_url && (
-                                  <img src={match.opponents[1].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
-                                )}
-                                <span className="font-medium text-sm text-left truncate">{match.opponents[1]?.opponent?.name || 'TBD'}</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ));
-              })()}
+                <MatchesPanel selectedLeague={selectedLeague} selectedDate={selectedDate} setSelectedDate={setSelectedDate} filter={filter} />
               </div>
-            </div>
             </div>
           ) : (
             <div className="bg-[#234d23] rounded-lg p-4 border border-[#388E3C]">
@@ -523,90 +499,11 @@ function App() {
                 Partidos
               </h2>
 
-              {loading && (
-                <div className="flex justify-center py-8">
-                  <div className="w-8 h-8 border-2 border-[#4CAF50] border-t-transparent rounded-full animate-spin"></div>
-                </div>
-              )}
+              {/* Removed instruction text per UX request */}
 
-              {error && (
-                <div className="text-center py-8 text-red-300 bg-red-900/20 rounded-lg p-4">
-                  {error}
-                </div>
-              )}
-
-              {!loading && !error && matches.length === 0 && (
-                <div className="text-center py-8 text-green-200 bg-[#1e3d1e]/50 rounded-lg">
-                  No hay partidos
-                </div>
-              )}
-
-              {!loading && !error && matches.length > 0 && (
-                <div className="space-y-3">
-                  {(() => {
-                    const grouped = groupMatchesByLeague(matches);
-                    const sortedLeagueNames = sortLeagues(Object.keys(grouped));
-                    return sortedLeagueNames.map(leagueName => (
-                      <div key={leagueName}>
-                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#388E3C]">
-                          <span className="text-sm font-bold text-[#4CAF50] uppercase tracking-wider">{leagueName}</span>
-                          <span className="text-xs text-green-400 bg-[#1e3d1e] px-2 py-0.5 rounded">{grouped[leagueName].length}</span>
-                        </div>
-                        <div className="space-y-2">
-                          {grouped[leagueName].map(match => {
-                            const score = getScore(match);
-                            const isLive = match.status === 'running';
-                            const isFinished = match.status === 'finished';
-
-                            return (
-                              <div 
-                                key={match.id} 
-                                className={`bg-[#1e3d1e] rounded-lg p-3 flex items-center justify-between border-l-4 ${
-                                  isLive ? 'border-green-400' : isFinished ? 'border-gray-500' : 'border-[#4CAF50]'
-                                }`}
-                              >
-                                <div className="flex items-center gap-3 flex-[3]">
-                                  <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
-                                    <span className="font-medium text-sm text-right truncate">{match.opponents[0]?.opponent?.name || 'TBD'}</span>
-                                    {match.opponents[0]?.opponent?.image_url && (
-                                      <img src={match.opponents[0].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
-                                    )}
-                                  </div>
-
-                                  <div className="text-center min-w-[70px]">
-                                    {isFinished && score ? (
-                                      <div className="flex items-center gap-1.5">
-                                        <span className={`text-xl font-bold ${score.score1 > score.score2 ? 'text-[#4CAF50]' : 'text-white'}`}>
-                                          {score.score1}
-                                        </span>
-                                        <span className="text-green-400">-</span>
-                                        <span className={`text-xl font-bold ${score.score2 > score.score1 ? 'text-[#4CAF50]' : 'text-white'}`}>
-                                          {score.score2}
-                                        </span>
-                                      </div>
-                                    ) : isLive ? (
-                                      <span className="text-green-400 font-bold text-xs bg-green-900/50 px-2 py-0.5 rounded animate-pulse">EN VIVO</span>
-                                    ) : (
-                                      <span className="text-[#81C784] font-bold text-sm">{formatDateTime(match.scheduled_at || match.begin_at)}</span>
-                                    )}
-                                  </div>
-
-                                  <div className="flex items-center gap-2 flex-1 justify-start min-w-0">
-                                    {match.opponents[1]?.opponent?.image_url && (
-                                      <img src={match.opponents[1].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
-                                    )}
-                                    <span className="font-medium text-sm text-left truncate">{match.opponents[1]?.opponent?.name || 'TBD'}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ));
-                  })()}
-                </div>
-              )}
+              <div className="mt-3">
+                <MatchesPanel selectedLeague={null} selectedDate={selectedDate} setSelectedDate={setSelectedDate} filter={filter} />
+              </div>
             </div>
           )}
         </main>
