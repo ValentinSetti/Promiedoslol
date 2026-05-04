@@ -97,16 +97,18 @@ export async function getUpcomingMatches(limit = 20) {
   }, 120);
 }
 
-export async function getMatchesByDate(date, limit = 50) {
+export async function getMatchesByDate(date, limit = 50, leagueId = null) {
   const startOfDay = new Date(date);
   startOfDay.setUTCHours(0, 0, 0, 0);
   
   const endOfDay = new Date(date);
   endOfDay.setUTCHours(23, 59, 59, 999);
 
+  const leagueIds = leagueId ? [parseInt(leagueId)] : ALLOWED_LEAGUES;
+
   return fetchWithCache('/lol/matches', {
-    'filter[begin_at]': `${startOfDay.toISOString()},${endOfDay.toISOString()}`,
-    'filter[league_id]': ALLOWED_LEAGUES.join(','),
+    'range[begin_at]': `${startOfDay.toISOString()},${endOfDay.toISOString()}`,
+    'filter[league_id]': leagueIds.join(','),
     'sort': 'begin_at',
     'page[size]': limit
   }, 300);

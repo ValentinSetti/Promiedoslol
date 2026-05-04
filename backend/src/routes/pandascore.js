@@ -36,8 +36,11 @@ router.get('/matches', async (req, res) => {
     if (page) filters['page[number]'] = parseInt(page);
     
     if (date) {
-      const data = await pandaScore.getMatchesByDate(date, parseInt(limit) || 10);
-      return res.json(data);
+      const startOfDay = new Date(date);
+      startOfDay.setUTCHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+      filters['range[begin_at]'] = `${startOfDay.toISOString()},${endOfDay.toISOString()}`;
     }
 
     if (!filters['page[size]']) {

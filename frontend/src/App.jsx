@@ -40,13 +40,9 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      let endpoint = '/api/matches?limit=100';
+      let endpoint = '/api/matches?limit=10';
 
-      if (filter === 'upcoming') {
-        endpoint = '/api/matches?status=upcoming&limit=50';
-      } else if (filter === 'finished') {
-        endpoint = '/api/matches?status=finished&limit=50';
-      } else if (filter === 'live') {
+      if (filter === 'live') {
         endpoint = '/api/matches?status=running&limit=50';
       }
 
@@ -54,22 +50,18 @@ function App() {
         endpoint += `&league_id=${selectedLeague}`;
       }
 
+      if (selectedDate) {
+        const year = selectedDate.getFullYear();
+        const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(selectedDate.getDate()).padStart(2, '0');
+        endpoint += `&date=${year}-${month}-${day}`;
+      }
+
       const response = await fetch(`${API_URL}${endpoint}`);
       if (!response.ok) throw new Error('Error al cargar partidos');
       let data = await response.json();
 
-      if (filter === 'all') {
-        data = data.filter(m => {
-          const dateToUse = m.scheduled_at || m.begin_at;
-          if (!dateToUse) return true;
-          const matchDate = new Date(dateToUse);
-          const now = new Date();
-          const sevenDaysAgo = new Date(now);
-          sevenDaysAgo.setDate(now.getDate() - 7);
-          return matchDate >= sevenDaysAgo && matchDate <= new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-        });
-        data = data.filter(m => m.opponents && m.opponents.length >= 2 && m.opponents[0]?.opponent && m.opponents[1]?.opponent);
-      }
+      data = data.filter(m => m.opponents && m.opponents.length >= 2 && m.opponents[0]?.opponent && m.opponents[1]?.opponent);
 
       setMatches(data);
     } catch (err) {
@@ -81,6 +73,15 @@ function App() {
 
   function formatTime(dateString) {
     return new Date(dateString).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatDateTime(dateString) {
+    const date = new Date(dateString);
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const hour = date.getHours().toString().padStart(2, '0');
+    const minute = date.getMinutes().toString().padStart(2, '0');
+    return `${day}/${month} ${hour}:${minute}`;
   }
 
   function formatDateHeader(dateString) {
@@ -262,8 +263,6 @@ function App() {
               {[
                 { key: 'all', label: 'Todos' },
                 { key: 'live', label: 'En Vivo' },
-                { key: 'upcoming', label: 'Próximos' },
-                { key: 'finished', label: 'Finalizados' },
               ].map(f => (
                 <button
                   key={f.key}
@@ -279,27 +278,39 @@ function App() {
               ))}
             </div>
 
-            <div className="flex gap-1 overflow-x-auto pb-1">
-              {generateCalendarDays().map((date, idx) => {
-                const isToday = date.toDateString() === new Date().toDateString();
-                const isSelected = date.toDateString() === selectedDate.toDateString();
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => setSelectedDate(date)}
-                    className={`flex-shrink-0 w-12 h-14 rounded flex flex-col items-center justify-center text-xs transition ${
-                      isSelected 
-                        ? 'bg-[#4CAF50] text-white' 
-                        : isToday 
-                          ? 'bg-[#81C784] text-[#1a3a1a] font-bold'
-                          : 'bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100'
-                    }`}
-                  >
-                    <span className="text-[10px]">{date.toLocaleDateString('es-ES', { weekday: 'short' }).toUpperCase()}</span>
-                    <span className="text-lg font-bold">{date.getDate()}</span>
-                  </button>
-                );
-              })}
+            <div className="flex items-center justify-center gap-4">
+              <button
+                onClick={() => {
+                  const newDate = new Date(selectedDate);
+                  newDate.setDate(newDate.getDate() - 1);
+                  setSelectedDate(newDate);
+                }}
+                className="flex-shrink-0 w-12 h-12 rounded-full bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100 flex items-center justify-center text-2xl font-bold transition"
+              >
+                ‹
+              </button>
+              
+              <div className="text-center">
+                {selectedDate.toDateString() === new Date().toDateString() ? (
+                  <span className="text-xl font-bold text-[#4CAF50]">HOY</span>
+                ) : (
+                  <span className="text-xl font-bold text-white">
+                    {selectedDate.getDate().toString().padStart(2, '0')}/
+                    {(selectedDate.getMonth() + 1).toString().padStart(2, '0')}
+                  </span>
+                )}
+              </div>
+
+              <button
+                onClick={() => {
+                  const newDate = new Date(selectedDate);
+                  newDate.setDate(newDate.getDate() + 1);
+                  setSelectedDate(newDate);
+                }}
+                className="flex-shrink-0 w-12 h-12 rounded-full bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100 flex items-center justify-center text-2xl font-bold transition"
+              >
+                ›
+              </button>
             </div>
           </div>
 
@@ -417,7 +428,7 @@ function App() {
                                 ) : isLive ? (
                                   <span className="text-green-400 font-bold text-xs bg-green-900/50 px-2 py-0.5 rounded animate-pulse">EN VIVO</span>
                                 ) : (
-                                  <span className="text-[#81C784] font-bold text-sm">{formatTime(match.scheduled_at || match.begin_at)}</span>
+                                  <span className="text-[#81C784] font-bold text-sm">{formatDateTime(match.scheduled_at || match.begin_at)}</span>
                                 )}
                               </div>
 
@@ -509,7 +520,7 @@ function App() {
                                     ) : isLive ? (
                                       <span className="text-green-400 font-bold text-xs bg-green-900/50 px-2 py-0.5 rounded animate-pulse">EN VIVO</span>
                                     ) : (
-                                      <span className="text-[#81C784] font-bold text-sm">{formatTime(match.scheduled_at || match.begin_at)}</span>
+                                      <span className="text-[#81C784] font-bold text-sm">{formatDateTime(match.scheduled_at || match.begin_at)}</span>
                                     )}
                                   </div>
 
