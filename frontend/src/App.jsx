@@ -19,6 +19,7 @@ function App() {
   const [filter, setFilter] = useState('finished');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [leagueStandingsMatches, setLeagueStandingsMatches] = useState([]);
   const [viewMode, setViewMode] = useState('partidos');
 
   useEffect(() => {
@@ -68,6 +69,59 @@ function App() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchMatchesForStandings(leagueId) {
+    try {
+      // Try to fetch tournaments to get the current one; if that fails, fallback to deriving tournament from matches
+      const limit = 500;
+      let tournaments = [];
+      try {
+        const tournamentsResp = await fetch(`${API_URL}/api/tournaments?league_id=${leagueId}`);
+        if (tournamentsResp.ok) {
+          tournaments = await tournamentsResp.json();
+        }
+      } catch (e) {
+        // ignore and fallback
+      }
+
+      const matchesResp = await fetch(`${API_URL}/api/matches?league_id=${leagueId}&status=finished&limit=${limit}`);
+      if (!matchesResp.ok) throw new Error('Error fetching league matches for standings');
+      let data = await matchesResp.json();
+
+      // If we have tournaments data, try pick the active or most recent tournament
+      const now = new Date();
+      let chosenTournamentId = null;
+      if (tournaments && tournaments.length > 0) {
+        let currentTournament = tournaments.find(t => t.begin_at && t.end_at && new Date(t.begin_at) <= now && new Date(t.end_at) >= now);
+        if (!currentTournament) {
+          currentTournament = tournaments.slice().sort((a, b) => new Date(b.begin_at) - new Date(a.begin_at))[0];
+        }
+        if (currentTournament && currentTournament.id) chosenTournamentId = currentTournament.id;
+      }
+
+      // If we couldn't determine a tournament, choose the tournament_id that appears most in the fetched matches
+      if (!chosenTournamentId) {
+        const counts = {};
+        data.forEach(m => {
+          if (m.tournament_id) counts[m.tournament_id] = (counts[m.tournament_id] || 0) + 1;
+        });
+        const entries = Object.entries(counts);
+        if (entries.length > 0) {
+          entries.sort((a, b) => b[1] - a[1]);
+          chosenTournamentId = parseInt(entries[0][0], 10);
+        }
+      }
+
+      if (chosenTournamentId) {
+        data = data.filter(m => m.tournament_id === chosenTournamentId);
+      }
+
+      setLeagueStandingsMatches(data);
+    } catch (err) {
+      console.error('Error fetching matches for standings:', err);
+      setLeagueStandingsMatches([]);
     }
   }
 
@@ -130,9 +184,22 @@ function App() {
     
     return Object.values(teams).sort((a, b) => {
       if (b.wins !== a.wins) return b.wins - a.wins;
-      return b.wins - a.wins;
+      // desempate por porcentaje de victorias (win rate)
+      const rateA = a.games > 0 ? a.wins / a.games : 0;
+      const rateB = b.games > 0 ? b.wins / b.games : 0;
+      if (rateB !== rateA) return rateB - rateA;
+      // finalmente por nombre
+      return a.name.localeCompare(b.name);
     });
   }
+
+  useEffect(() => {
+    if (selectedLeague) {
+      fetchMatchesForStandings(selectedLeague);
+    } else {
+      setLeagueStandingsMatches([]);
+    }
+  }, [selectedLeague]);
 
   function generateCalendarDays() {
     const days = [];
@@ -348,7 +415,7 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {calculateStandings(matches).map((team, idx) => (
+                      {calculateStandings(selectedLeague ? leagueStandingsMatches : matches).map((team, idx) => (
                         <tr key={team.id} className="border-b border-[#388E3C] hover:bg-[#234d23]">
                           <td className="px-3 py-2 text-[#4CAF50] font-bold">{idx + 1}</td>
                           <td className="px-3 py-2 flex items-center gap-2">

@@ -27,11 +27,12 @@ router.get('/tournaments', async (req, res) => {
 
 router.get('/matches', async (req, res) => {
   try {
-    const { status, league_id, limit, page, date } = req.query;
+    const { status, league_id, limit, page, date, tournament_id } = req.query;
     const filters = {};
 
     if (status) filters['filter[status]'] = status;
     if (league_id) filters['filter[league_id]'] = league_id;
+    if (tournament_id) filters['filter[tournament_id]'] = tournament_id;
     if (limit) filters['page[size]'] = parseInt(limit);
     if (page) filters['page[number]'] = parseInt(page);
     
