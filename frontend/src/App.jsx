@@ -3,14 +3,12 @@ import { useState, useEffect } from 'react';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const leagues = [
-  { id: 1, name: 'LCK (Corea)', slug: 'lck' },
-  { id: 2, name: 'LEC (Europa)', slug: 'lec' },
-  { id: 3, name: 'LCS (Norteamérica)', slug: 'lcs' },
-  { id: 4, name: 'LJL (Japón)', slug: 'ljl' },
-  { id: 5, name: 'LCK (España)', slug: 'lsl' },
-  { id: 6, name: 'CBLOL (Brasil)', slug: 'cblol' },
-  { id: 7, name: 'LLA (Latinoamérica)', slug: 'lla' },
-  { id: 8, name: 'Worlds', slug: 'worlds' },
+  { id: 293, name: 'LCK', slug: 'lck' },
+  { id: 4197, name: 'LEC', slug: 'lec' },
+  { id: 4198, name: 'LCS', slug: 'lcs' },
+  { id: 294, name: 'LPL', slug: 'lpl' },
+  { id: 302, name: 'CBLOL', slug: 'cblol' },
+  { id: 5351, name: 'LCP', slug: 'lcp' },
 ];
 
 function App() {
@@ -21,6 +19,7 @@ function App() {
   const [filter, setFilter] = useState('finished');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [viewMode, setViewMode] = useState('partidos');
 
   useEffect(() => {
     fetchLeagues();
@@ -51,13 +50,13 @@ function App() {
         endpoint = '/api/matches?status=running&limit=50';
       }
 
+      if (selectedLeague) {
+        endpoint += `&league_id=${selectedLeague}`;
+      }
+
       const response = await fetch(`${API_URL}${endpoint}`);
       if (!response.ok) throw new Error('Error al cargar partidos');
       let data = await response.json();
-
-      if (selectedLeague) {
-        data = data.filter(m => m.league_id === selectedLeague || m.league?.id === selectedLeague);
-      }
 
       if (filter === 'all') {
         data = data.filter(m => {
@@ -98,6 +97,42 @@ function App() {
     return { score1, score2 };
   }
 
+  function calculateStandings(matches) {
+    const teams = {};
+    matches.forEach(match => {
+      if (match.status !== 'finished' || !match.results || match.results.length < 2) return;
+      const team1 = match.opponents[0]?.opponent;
+      const team2 = match.opponents[1]?.opponent;
+      if (!team1 || !team2) return;
+      
+      const score1 = match.results.find(r => r.team_id === team1.id)?.score ?? 0;
+      const score2 = match.results.find(r => r.team_id === team2.id)?.score ?? 0;
+      
+      if (!teams[team1.id]) {
+        teams[team1.id] = { id: team1.id, name: team1.name, image_url: team1.image_url, wins: 0, losses: 0, games: 0 };
+      }
+      if (!teams[team2.id]) {
+        teams[team2.id] = { id: team2.id, name: team2.name, image_url: team2.image_url, wins: 0, losses: 0, games: 0 };
+      }
+      
+      teams[team1.id].games++;
+      teams[team2.id].games++;
+      
+      if (score1 > score2) {
+        teams[team1.id].wins++;
+        teams[team2.id].losses++;
+      } else if (score2 > score1) {
+        teams[team2.id].wins++;
+        teams[team1.id].losses++;
+      }
+    });
+    
+    return Object.values(teams).sort((a, b) => {
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      return b.wins - a.wins;
+    });
+  }
+
   function generateCalendarDays() {
     const days = [];
     const today = new Date();
@@ -107,6 +142,31 @@ function App() {
       days.push(date);
     }
     return days;
+  }
+
+  function groupMatchesByLeague(matches) {
+    const grouped = {};
+    matches.forEach(match => {
+      const leagueName = match.league?.name || 'Otra';
+      if (!grouped[leagueName]) {
+        grouped[leagueName] = [];
+      }
+      grouped[leagueName].push(match);
+    });
+    return grouped;
+  }
+
+  const leagueOrder = ['LCK', 'LEC', 'LCS', 'LPL', 'CBLOL', 'LCP', 'Americas Cup', 'First Stand', 'Worlds', 'MSI'];
+
+  function sortLeagues(leagueNames) {
+    return leagueNames.sort((a, b) => {
+      const indexA = leagueOrder.indexOf(a);
+      const indexB = leagueOrder.indexOf(b);
+      if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      return indexA - indexB;
+    });
   }
 
   return (
@@ -244,10 +304,36 @@ function App() {
           </div>
 
           <div className="bg-[#234d23] rounded-lg p-4 border border-[#388E3C]">
-            <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <span className="w-2 h-2 bg-[#4CAF50] rounded-full"></span>
-              Partidos del {formatDateHeader(selectedDate.toISOString())}
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <span className="w-2 h-2 bg-[#4CAF50] rounded-full"></span>
+                {selectedLeague 
+                  ? leagues.find(l => l.id === selectedLeague)?.name || 'Liga'
+                  : `Partidos del ${formatDateHeader(selectedDate.toISOString())}`}
+              </h2>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setViewMode('partidos')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                    viewMode === 'partidos' 
+                      ? 'bg-[#4CAF50] text-white' 
+                      : 'bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100'
+                  }`}
+                >
+                  Partidos
+                </button>
+                <button
+                  onClick={() => setViewMode('posiciones')}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition ${
+                    viewMode === 'posiciones' 
+                      ? 'bg-[#4CAF50] text-white' 
+                      : 'bg-[#1e3d1e] hover:bg-[#388E3C] text-green-100'
+                  }`}
+                >
+                  Posiciones
+                </button>
+              </div>
+            </div>
 
             {loading && (
               <div className="flex justify-center py-8">
@@ -267,63 +353,108 @@ function App() {
               </div>
             )}
 
-            <div className="space-y-2">
-              {matches.map(match => {
-                const score = getScore(match);
-                const isLive = match.status === 'running';
-                const isFinished = match.status === 'finished';
+            {viewMode === 'posiciones' && !loading && !error && (
+              <div className="bg-[#1e3d1e] rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-[#2E7D32] text-white">
+                    <tr>
+                      <th className="px-3 py-2 text-left">#</th>
+                      <th className="px-3 py-2 text-left">Equipo</th>
+                      <th className="px-3 py-2 text-center">PJ</th>
+                      <th className="px-3 py-2 text-center">G</th>
+                      <th className="px-3 py-2 text-center">P</th>
+                      <th className="px-3 py-2 text-center">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {calculateStandings(matches).map((team, idx) => (
+                      <tr key={team.id} className="border-b border-[#388E3C] hover:bg-[#234d23]">
+                        <td className="px-3 py-2 text-[#4CAF50] font-bold">{idx + 1}</td>
+                        <td className="px-3 py-2 flex items-center gap-2">
+                          {team.image_url && (
+                            <img src={team.image_url} alt="" className="w-6 h-6 rounded-full" />
+                          )}
+                          <span className="text-white">{team.name}</span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-green-100">{team.games}</td>
+                        <td className="px-3 py-2 text-center text-[#4CAF50]">{team.wins}</td>
+                        <td className="px-3 py-2 text-center text-red-300">{team.losses}</td>
+                        <td className="px-3 py-2 text-center text-green-100">
+                          {team.games > 0 ? Math.round((team.wins / team.games) * 100) : 0}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-                return (
-                  <div 
-                    key={match.id} 
-                    className={`bg-[#1e3d1e] rounded-lg p-3 flex items-center justify-between border-l-4 ${
-                      isLive ? 'border-green-400' : isFinished ? 'border-gray-500' : 'border-[#4CAF50]'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="flex flex-col items-center">
-                        <span className="text-[10px] text-green-300">{match.league?.name || 'Liga'}</span>
-                        <span className="text-[9px] text-green-400/70 truncate max-w-[80px]">{match.tournament?.name || ''}</span>
-                      </div>
+            {viewMode === 'partidos' && (
+            <div className="space-y-4">
+              {(() => {
+                const grouped = groupMatchesByLeague(matches);
+                const sortedLeagueNames = sortLeagues(Object.keys(grouped));
+                return sortedLeagueNames.map(leagueName => (
+                  <div key={leagueName}>
+                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#388E3C]">
+                      <span className="text-sm font-bold text-[#4CAF50] uppercase tracking-wider">{leagueName}</span>
+                      <span className="text-xs text-green-400 bg-[#1e3d1e] px-2 py-0.5 rounded">{grouped[leagueName].length}</span>
                     </div>
+                    <div className="space-y-2">
+                      {grouped[leagueName].map(match => {
+                        const score = getScore(match);
+                        const isLive = match.status === 'running';
+                        const isFinished = match.status === 'finished';
 
-                    <div className="flex items-center gap-3 flex-[3]">
-                      <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
-                        <span className="font-medium text-sm text-right truncate">{match.opponents[0]?.opponent?.name || 'TBD'}</span>
-                        {match.opponents[0]?.opponent?.image_url && (
-                          <img src={match.opponents[0].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
-                        )}
-                      </div>
+                        return (
+                          <div 
+                            key={match.id} 
+                            className={`bg-[#1e3d1e] rounded-lg p-3 flex items-center justify-between border-l-4 ${
+                              isLive ? 'border-green-400' : isFinished ? 'border-gray-500' : 'border-[#4CAF50]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 flex-[3]">
+                              <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+                                <span className="font-medium text-sm text-right truncate">{match.opponents[0]?.opponent?.name || 'TBD'}</span>
+                                {match.opponents[0]?.opponent?.image_url && (
+                                  <img src={match.opponents[0].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
+                                )}
+                              </div>
 
-                      <div className="text-center min-w-[70px]">
-                        {isFinished && score ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-xl font-bold ${score.score1 > score.score2 ? 'text-[#4CAF50]' : 'text-white'}`}>
-                              {score.score1}
-                            </span>
-                            <span className="text-green-400">-</span>
-                            <span className={`text-xl font-bold ${score.score2 > score.score1 ? 'text-[#4CAF50]' : 'text-white'}`}>
-                              {score.score2}
-                            </span>
+                              <div className="text-center min-w-[70px]">
+                                {isFinished && score ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`text-xl font-bold ${score.score1 > score.score2 ? 'text-[#4CAF50]' : 'text-white'}`}>
+                                      {score.score1}
+                                    </span>
+                                    <span className="text-green-400">-</span>
+                                    <span className={`text-xl font-bold ${score.score2 > score.score1 ? 'text-[#4CAF50]' : 'text-white'}`}>
+                                      {score.score2}
+                                    </span>
+                                  </div>
+                                ) : isLive ? (
+                                  <span className="text-green-400 font-bold text-xs bg-green-900/50 px-2 py-0.5 rounded animate-pulse">EN VIVO</span>
+                                ) : (
+                                  <span className="text-[#81C784] font-bold text-sm">{formatTime(match.scheduled_at || match.begin_at)}</span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2 flex-1 justify-start min-w-0">
+                                {match.opponents[1]?.opponent?.image_url && (
+                                  <img src={match.opponents[1].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
+                                )}
+                                <span className="font-medium text-sm text-left truncate">{match.opponents[1]?.opponent?.name || 'TBD'}</span>
+                              </div>
+                            </div>
                           </div>
-                        ) : isLive ? (
-                          <span className="text-green-400 font-bold text-xs bg-green-900/50 px-2 py-0.5 rounded animate-pulse">EN VIVO</span>
-                        ) : (
-                          <span className="text-[#81C784] font-bold text-sm">{formatTime(match.begin_at)}</span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 flex-1 justify-start min-w-0">
-                        {match.opponents[1]?.opponent?.image_url && (
-                          <img src={match.opponents[1].opponent.image_url} alt="" className="w-8 h-8 rounded-full border border-green-600" />
-                        )}
-                        <span className="font-medium text-sm text-left truncate">{match.opponents[1]?.opponent?.name || 'TBD'}</span>
-                      </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
+                ));
+              })()}
             </div>
+            )}
           </div>
         </main>
       </div>

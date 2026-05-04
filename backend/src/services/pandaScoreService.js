@@ -4,6 +4,8 @@ import NodeCache from 'node-cache';
 const cache = new NodeCache({ stdTTL: 300 });
 const PANDASCORE_BASE_URL = 'https://api.pandascore.co';
 
+const ALLOWED_LEAGUES = [302, 293, 5351, 4198, 4197, 294];
+
 function getApiKey() {
   const key = process.env.PANDASCORE_API_KEY;
   if (!key) {
@@ -60,6 +62,7 @@ export async function getAllMatches(filters = {}) {
   return fetchWithCache('/lol/matches', {
     'sort': '-begin_at',
     'page[size]': 100,
+    'filter[league_id]': ALLOWED_LEAGUES.join(','),
     ...filters
   }, 6000);
 }
@@ -79,6 +82,7 @@ export async function getMatchById(matchId) {
 export async function getPastMatches(limit = 20) {
   return fetchWithCache('/lol/matches', {
     'filter[status]': 'finished',
+    'filter[league_id]': ALLOWED_LEAGUES.join(','),
     'sort': '-begin_at',
     'page[size]': limit
   }, 300);
@@ -87,6 +91,7 @@ export async function getPastMatches(limit = 20) {
 export async function getUpcomingMatches(limit = 20) {
   return fetchWithCache('/lol/matches', {
     'filter[status]': 'upcoming',
+    'filter[league_id]': ALLOWED_LEAGUES.join(','),
     'sort': 'begin_at',
     'page[size]': limit
   }, 120);
@@ -101,6 +106,7 @@ export async function getMatchesByDate(date, limit = 50) {
 
   return fetchWithCache('/lol/matches', {
     'filter[begin_at]': `${startOfDay.toISOString()},${endOfDay.toISOString()}`,
+    'filter[league_id]': ALLOWED_LEAGUES.join(','),
     'sort': 'begin_at',
     'page[size]': limit
   }, 300);
@@ -113,4 +119,12 @@ export function clearCache() {
 
 export function getCacheStats() {
   return cache.getStats();
+}
+
+export async function getTournamentStandings(tournamentId) {
+  return fetchWithCache(`/lol/tournaments/${tournamentId}/standings`, {}, 300);
+}
+
+export async function getRunningTournaments() {
+  return fetchWithCache('/lol/tournaments/running', {}, 120);
 }

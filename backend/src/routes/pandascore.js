@@ -120,4 +120,22 @@ router.get('/cache/stats', (req, res) => {
   res.json(stats);
 });
 
+router.get('/tournaments/running', async (req, res) => {
+  try {
+    const data = await pandaScore.getRunningTournaments();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message, details: error.response?.data });
+  }
+});
+
+router.get('/tournaments/:id/standings', async (req, res) => {
+  try {
+    const data = await pandaScore.getTournamentStandings(req.params.id);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message, details: error.response?.data });
+  }
+});
+
 export default router;
